@@ -130,7 +130,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
     c.rect(40, height - 60, width - 80, 30, fill=1, stroke=0)
     c.setFont("Helvetica-Bold", 14)
     c.setFillColor(colors.white)
-    c.drawString(50, height - 50, "H & N Perry")
+    c.drawString(50, height - 50, "YOUR_COMPANY_NAME")
     c.drawRightString(width - 50, height - 50, "Electricity Statement")
 
     # ===== Statement Date =====
@@ -154,9 +154,9 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
 
     # ===== Prepared by =====
     c.setFont("Helvetica-Bold", 9)
-    c.drawString(40, height - 210, "Prepared by Element47 Pty Ltd on behalf of:")
+    c.drawString(40, height - 210, "Prepared by YOUR_ORG_NAME on behalf of:")
     c.setFont("Helvetica", 9)
-    c.drawString(40, height - 225, "The Plaza Centre, 38 Mandurah Terrace, Mandurah 6210")
+    c.drawString(40, height - 225, "YOUR_ADDRESS")
 
     # ===== Statement Summary =====
     box_x = width - 300

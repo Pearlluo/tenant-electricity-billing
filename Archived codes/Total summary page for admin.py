@@ -75,7 +75,7 @@ elements = []
 
 # 页眉（靠左对齐）
 elements.append(Paragraph(
-    "<para align='left'><font size=9>Prepared by Element47 Pty Ltd<br/>Plaza Centre</font></para>",
+    "<para align='left'><font size=9>Prepared by YOUR_ORG_NAME<br/>YOUR_ADDRESS</font></para>",
     styles["Normal"]
 ))
 elements.append(Spacer(1, 12))
