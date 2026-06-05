@@ -1,0 +1,34 @@
+# Data files (may contain sensitive business data)
+*.xlsx
+*.xls
+*.csv
+
+# Generated output PDFs
+FinalReports/
+CoverPages/
+MeterReports/
+
+# Zip archives
+*.zip
+
+# Python virtual environment
+bin/
+lib/
+lib64/
+include/
+venv/
+.venv/
+pyvenv.cfg
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+.~*
+
+# IDE
+.idea/
+.vscode/
