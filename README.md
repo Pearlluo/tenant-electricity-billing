@@ -8,23 +8,26 @@ Automated electricity statement generator for retail tenants — processes raw s
 
 ## Pipeline
 
-```
-Results.xlsx                        ← Raw 5-min smart meter export
-     │
-     ▼
-Data Cleaning.py                    ← Resample to 30-min, interpolate, remove outliers
-     │
-     └──► cleaned_30min.xlsx
-               │
-               ├──► Cover Page.py          ─┐
-               │                            │
-               ├──► Second Page.py          ├──► Intergration pdf.py
-               │                            │
-               ├──► Final Page.py           │         └──► FinalReports/
-               │                            │               SHOP1_Final.pdf
-               └──► Common Service.py      ─┘               SHOP2_Final.pdf
-                                                             ...
-                                                             Common_Final.pdf
+```mermaid
+flowchart TD
+    A[("Results.xlsx\nRaw 5-min meter export")] --> B["Data Cleaning.py\nResample · Interpolate · Outlier removal"]
+    B --> C[("cleaned_30min.xlsx")]
+
+    C --> D["Cover Page.py"]
+    C --> E["Second Page.py"]
+    C --> F["Final Page.py"]
+    C --> G["Common Service.py"]
+
+    D --> H["Intergration pdf.py"]
+    E --> H
+    F --> H
+    G --> H
+
+    H --> I["FinalReports/\nSHOP1_Final.pdf\nSHOP2_Final.pdf\n...\nCommon_Final.pdf"]
+
+    style A fill:#e8f5e9,stroke:#2e7d32
+    style C fill:#e8f5e9,stroke:#2e7d32
+    style I fill:#e3f2fd,stroke:#1565c0
 ```
 
 ---
