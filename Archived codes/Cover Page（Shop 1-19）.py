@@ -7,7 +7,7 @@ from pathlib import Path
 
 _BASE_DIR = Path(__file__).parent.parent
 
-# ===== 数据计算函数 =====
+# ===== Usage calculation function =====
 def calculate_usage(df, meter="SHOP1", daily_charge=1.87964, unit_rate=0.381783):
     df_meter = df[df["Meter"] == meter].copy()
     df_meter["DateTime"] = pd.to_datetime(df_meter["DateTime"])
@@ -17,17 +17,17 @@ def calculate_usage(df, meter="SHOP1", daily_charge=1.87964, unit_rate=0.381783)
     end_time = df_meter["DateTime"].iloc[-1]
     days = (end_time - start_time).days + 1
 
-    # 起始、结束读数
+    # Start and end readings
     prev_read = df_meter["kWh_IMP"].iloc[0]
     curr_read = df_meter["kWh_IMP"].iloc[-1]
 
-    # 用电量（kWh）
+    # Consumption (kWh)
     consumption = curr_read - prev_read
 
-    # 每天平均用电
+    # Average daily consumption
     avg_units = consumption / days if days > 0 else 0
 
-    # ====== 费用计算规则 ======
+    # ====== Cost calculation ======
     if consumption == 0:
         daily_cost = 0
         consumption_cost = 0
@@ -60,30 +60,30 @@ def calculate_usage(df, meter="SHOP1", daily_charge=1.87964, unit_rate=0.381783)
         "avg_cost_per_day": avg_cost_per_day
     }
 
-# ===== PDF 生成函数 =====
+# ===== PDF generation function =====
 def generate_cover_page(pdf_path, usage_data, tenant_name="Tenant Name", premise="Premise Address", statement_date="2025/07/22", meter_name="Meter"):
     c = canvas.Canvas(pdf_path, pagesize=landscape(A4))
     width, height = landscape(A4)
 
-    # Header 深绿色条
-    c.setFillColor(colors.HexColor("#2E7D32"))  # 深绿色
+    # Dark green header bar
+    c.setFillColor(colors.HexColor("#2E7D32"))  # Dark green
     c.rect(40, height-60, width-80, 30, fill=1, stroke=0)
     c.setFont("Helvetica-Bold", 12)
     c.setFillColor(colors.white)
     c.drawString(50, height-50, "YOUR_COMPANY_NAME")
     c.drawRightString(width-50, height-50, "Electricity Statement")
 
-    # Statement Date
+    # Statement date
     c.setFillColor(colors.black)
     c.setFont("Helvetica", 10)
     c.drawString(40, height-90, f"Statement Date: {statement_date}")
 
-    # Tenant Info
+    # Tenant info
     c.drawString(40, height-120, "To:")
     c.drawString(80, height-120, tenant_name)
     c.drawString(80, height-140, premise)
 
-    # Prepared By
+    # Prepared by
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, height-170, "Prepared by YOUR_ORG_NAME on behalf of:")
     c.setFont("Helvetica", 9)
@@ -92,7 +92,7 @@ def generate_cover_page(pdf_path, usage_data, tenant_name="Tenant Name", premise
     c.drawString(40, height-215, "YOUR_CITY POSTCODE")
     c.drawString(40, height-235, "Property Manager: YOUR_COMPANY_NAME")
 
-    # ===== 右侧 Statement Summary =====
+    # ===== Statement Summary box (right side) =====
     box_x = width - 300
     box_y = height - 120
     c.setFont("Helvetica-Bold", 9)
@@ -107,25 +107,25 @@ def generate_cover_page(pdf_path, usage_data, tenant_name="Tenant Name", premise
     c.drawString(box_x, box_y - 60, "GST")
     c.drawRightString(width - 50, box_y - 60, f"${usage_data['gst']:.2f}")
 
-    # === Total incl GST ===
+    # Total including GST
     row_height = 18
     row_y = box_y - 95
 
-    # 左边绿色框
-    c.setFillColor(colors.HexColor("#2E7D32"))  # 深绿色
+    # Left green label box
+    c.setFillColor(colors.HexColor("#2E7D32"))  # Dark green
     c.rect(box_x, row_y, 120, row_height, fill=1, stroke=0)
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 9)
     c.drawCentredString(box_x + 60, row_y + 5, "Total (incl GST)")
 
-    # 右边绿色框
-    c.setFillColor(colors.limegreen)  # 浅绿色
+    # Right green value box
+    c.setFillColor(colors.limegreen)  # Light green
     c.rect(width - 120, row_y, 70, row_height, fill=1, stroke=0)
     c.setFillColor(colors.black)
     c.setFont("Helvetica-Bold", 10)
     c.drawCentredString(width - 85, row_y + 5, f"${usage_data['total_incl']:.2f}")
 
-    # ===== Charges 表格 =====
+    # ===== Charges table =====
     table_y = height-300
     headers = ["Unit", "Date", "Previous Reading (kWh)", "Current Reading (kWh)",
                "Consumption (kWh)", "Rate", "Daily Charge"]
@@ -137,7 +137,7 @@ def generate_cover_page(pdf_path, usage_data, tenant_name="Tenant Name", premise
         c.drawString(col_x[i], table_y, h)
     c.line(40, table_y-2, width-40, table_y-2)
 
-    # 数据行
+    # Data row
     row_y = table_y - 20
     c.setFont("Helvetica", 8)
     c.drawString(col_x[0], row_y, meter_name)
@@ -150,7 +150,7 @@ def generate_cover_page(pdf_path, usage_data, tenant_name="Tenant Name", premise
 
     c.line(40, row_y-2, width-40, row_y-2)
 
-    # ===== Summary + Tariff =====
+    # ===== Summary and tariff =====
     y = row_y - 50
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, y, "Summary")
@@ -167,7 +167,7 @@ def generate_cover_page(pdf_path, usage_data, tenant_name="Tenant Name", premise
     c.save()
 
 
-# === 批量生成所有 Meter 的 Cover PDF ===
+# ===== Batch generate cover PDFs for all meters =====
 def generate_all_covers(file_path, output_folder, daily_charge=1.87964, unit_rate=0.381783):
     os.makedirs(output_folder, exist_ok=True)
     df = pd.read_excel(file_path)
@@ -177,10 +177,10 @@ def generate_all_covers(file_path, output_folder, daily_charge=1.87964, unit_rat
         usage_data = calculate_usage(df, meter, daily_charge, unit_rate)
         pdf_path = os.path.join(output_folder, f"{meter}_Cover.pdf")
         generate_cover_page(pdf_path, usage_data, tenant_name=meter, premise=f"Premise ({meter})", meter_name=meter)
-        print(f"✅ {meter} done: {pdf_path}")
+        print(f"Done: {pdf_path}")
 
 
-# === 使用方法 ===
+# === Run ===
 generate_all_covers(
     file_path=_BASE_DIR / "Results.xlsx",
     output_folder=_BASE_DIR / "CoverPages",

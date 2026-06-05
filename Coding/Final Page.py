@@ -8,34 +8,37 @@ from pathlib import Path
 
 _BASE_DIR = Path(__file__).parent.parent
 
-# ============ 清理隐藏字符 ============
+
+# ============ Strip hidden characters from text ============
 def clean_text(text):
     if pd.isna(text):
         return ""
     cleaned = (
         str(text)
-        .replace("\u202c", "")
-        .replace("\ufeff", "")
-        .replace("\u200b", "")
+        .replace("‬", "")
+        .replace("﻿", "")
+        .replace("​", "")
         .replace("\xa0", " ")
         .strip()
     )
-    cleaned = re.sub(r"[^\x20-\x7E\u00A0-\u024F]+", "", cleaned)
+    cleaned = re.sub(r"[^\x20-\x7E -ɏ]+", "", cleaned)
     return cleaned
 
-# ============ 提取 Shop No ============
+
+# ============ Extract shop number from meter name ============
 def extract_shop_no(meter_name: str) -> str:
     match = re.search(r"\d+", str(meter_name))
     if match:
         return match.group(0)
     return meter_name if meter_name in ["Common", "MDB"] else None
 
-# ============ 安全获取读数（支持插值） ============
+
+# ============ Safe meter reading with interpolation fallback ============
 def get_read_at(df_meter, target_time, column="kWh_IMP"):
     df_exact = df_meter.loc[df_meter["DateTime"] == target_time, column]
     if not df_exact.empty:
         return df_exact.iloc[0]
-    # 没有精确点 → 前后点插值
+    # Interpolate from surrounding points
     df_before = df_meter[df_meter["DateTime"] < target_time].tail(1)
     df_after = df_meter[df_meter["DateTime"] > target_time].head(1)
     if not df_before.empty and not df_after.empty:
@@ -43,14 +46,15 @@ def get_read_at(df_meter, target_time, column="kWh_IMP"):
         t2, v2 = df_after["DateTime"].iloc[0], df_after[column].iloc[0]
         ratio = (target_time - t1) / (t2 - t1)
         return v1 + ratio * (v2 - v1)
-    # fallback：取头尾
+    # Fallback: use nearest boundary value
     if not df_before.empty:
         return df_before[column].iloc[0]
     if not df_after.empty:
         return df_after[column].iloc[0]
     return None
 
-# ============ 电费计算函数 ============
+
+# ============ Electricity usage and cost calculation ============
 def calculate_usage(df, meter, shop_info, start_date, end_date, skip_cost=False):
     df_meter = df[df["Meter"] == meter].copy()
     df_meter["DateTime"] = pd.to_datetime(df_meter["DateTime"])
@@ -66,7 +70,7 @@ def calculate_usage(df, meter, shop_info, start_date, end_date, skip_cost=False)
 
     consumption = curr_read - prev_read
 
-    # 固定 31 天
+    # Fixed 31-day billing period
     days = 31
     daily_charge = shop_info.get("Daily Supply Charge $ (Exc. GST)", 0)
     anytime_rate = shop_info.get("AnyTime Consumption Rate $ (Exc. GST)")
@@ -74,7 +78,7 @@ def calculate_usage(df, meter, shop_info, start_date, end_date, skip_cost=False)
     peak_rate = shop_info.get("Peak Time Rate $ (Exc. GST)")
     offpeak_rate = shop_info.get("Off Peak Rate $ (Exc. GST)")
 
-    # Anytime 阶梯电价
+    # Anytime / tiered tariff
     if pd.notna(anytime_rate):
         df_meter["kWh_IMP_interval"] = df_meter["kWh_IMP"].diff().clip(lower=0).fillna(0)
         df_daily = df_meter.resample("D", on="DateTime").sum()
@@ -85,7 +89,6 @@ def calculate_usage(df, meter, shop_info, start_date, end_date, skip_cost=False)
         anytime_cost = (df_daily["Anytime_kWh"] * anytime_rate).sum()
         after1650_cost = (df_daily["After1650_kWh"] * after1650_rate).sum()
         daily_cost = daily_charge * days
-
         total_excl = daily_cost + anytime_cost + after1650_cost
 
         return {
@@ -103,7 +106,7 @@ def calculate_usage(df, meter, shop_info, start_date, end_date, skip_cost=False)
             "total_incl": total_excl * 1.1,
         }
 
-    # TOU
+    # Time-of-use tariff
     elif pd.notna(peak_rate) and pd.notna(offpeak_rate):
         df_meter["diff_kwh"] = df_meter["kWh_IMP"].diff().clip(lower=0).fillna(0)
 
@@ -122,7 +125,6 @@ def calculate_usage(df, meter, shop_info, start_date, end_date, skip_cost=False)
         peak_cost = peak_kwh * peak_rate
         offpeak_cost = offpeak_kwh * offpeak_rate
         daily_cost = daily_charge * days
-
         total_excl = daily_cost + peak_cost + offpeak_cost
 
         return {
@@ -141,7 +143,8 @@ def calculate_usage(df, meter, shop_info, start_date, end_date, skip_cost=False)
         }
     return None
 
-# ============ 生成 Summary Report ============
+
+# ============ Generate tenants summary PDF ============
 def generate_summary_report(results_file, mapping_file, output_pdf):
     df = pd.read_excel(results_file)
     df["DateTime"] = pd.to_datetime(df["DateTime"])
@@ -161,7 +164,10 @@ def generate_summary_report(results_file, mapping_file, output_pdf):
                             leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=20)
     elements = []
 
-    elements.append(Paragraph("<para align='center'><b><font size=14>Tenants Summary Report</font></b></para>", styles["Normal"]))
+    elements.append(Paragraph(
+        "<para align='center'><b><font size=14>Tenants Summary Report</font></b></para>",
+        styles["Normal"]
+    ))
     elements.append(Spacer(1, 20))
 
     total_consumption = 0
@@ -171,7 +177,7 @@ def generate_summary_report(results_file, mapping_file, output_pdf):
 
     skip_shops = {"13", "17", "18"}
 
-    # 固定 Loss Cost
+    # Fixed embedded network loss cost
     loss_cost_excl = 310.35
     loss_cost_incl = loss_cost_excl * 1.1
 
@@ -208,12 +214,10 @@ def generate_summary_report(results_file, mapping_file, output_pdf):
                 ["", "", "", "", "", "", "GST (10%)", f"{usage['gst']:.2f}"],
                 ["", "", "", "", "", "", "TOTAL inc GST", f"{usage['total_incl']:.2f}"],
             ]
-
-            # === 如果是 Common，加 Loss Cost ===
+            # Add loss cost row for Common meter
             if shop_no == "Common":
                 data.append(["", "", "", "", "", "", "All Meter Loss Cost", f"{loss_cost_excl:.2f}"])
                 data.append(["", "", "", "", "", "", "TOTAL inc GST (with Loss)", f"{usage['total_incl'] + loss_cost_incl:.2f}"])
-
         else:
             data = [
                 ["Date", "Prev (kWh)", "Curr (kWh)", "Consumption (kWh)",
@@ -240,10 +244,10 @@ def generate_summary_report(results_file, mapping_file, output_pdf):
         elements.append(table)
         elements.append(Spacer(1, 15))
 
-    # ========= Summary Check =========
+    # Summary check: revenue vs grid costs
     var_kwh = total_consumption - check_consumption
     var_pct_kwh = var_kwh / check_consumption if check_consumption != 0 else 0
-    # ⚠️ Revenue 要加 Loss Cost
+    # Revenue includes loss cost
     var_cost = (total_cost_incl + loss_cost_incl) - check_cost_incl
     var_pct_cost = var_cost / check_cost_incl if check_cost_incl != 0 else 0
 
@@ -279,24 +283,18 @@ def generate_summary_report(results_file, mapping_file, output_pdf):
     elements.append(table2)
     elements.append(Spacer(1, 10))
     elements.append(Paragraph(
-        f"<font size=8>Note: Embedded Network Revenue includes all Shops, Common, plus All Meter Loss Cost (${loss_cost_excl:.2f} excl GST, {loss_cost_incl:.2f} incl GST)</font>",
+        f"<font size=8>Note: Embedded Network Revenue includes all Shops, Common, plus All Meter Loss Cost "
+        f"(${loss_cost_excl:.2f} excl GST, ${loss_cost_incl:.2f} incl GST)</font>",
         styles["Normal"]
     ))
 
     doc.build(elements)
-    print(f"✅ 报告已生成: {output_pdf}")
+    print(f"Report generated: {output_pdf}")
 
 
-# ============ 使用 ============
+# ============ Run ============
 generate_summary_report(
     results_file=_BASE_DIR / "cleaned_30min.xlsx",
     mapping_file=_BASE_DIR / "C&E Report (Tariff after July).xlsx",
     output_pdf="Tenants_Summary_Report_Latest.pdf",
 )
-
-
-
-
-
-
-

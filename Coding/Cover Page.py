@@ -9,23 +9,23 @@ from pathlib import Path
 _BASE_DIR = Path(__file__).parent.parent
 
 
-# ============ 清理隐藏字符 ============
+# ============ Strip hidden characters from text ============
 def clean_text(text):
     if pd.isna(text):
         return ""
     cleaned = (
         str(text)
-        .replace("\u202c", "")
-        .replace("\ufeff", "")
-        .replace("\u200b", "")
+        .replace("‬", "")
+        .replace("﻿", "")
+        .replace("​", "")
         .replace("\xa0", " ")
         .strip()
     )
-    cleaned = re.sub(r"[^\x20-\x7E\u00A0-\u024F]+", "", cleaned)
+    cleaned = re.sub(r"[^\x20-\x7E -ɏ]+", "", cleaned)
     return cleaned
 
 
-# ============ 提取 Shop No ============
+# ============ Extract shop number from meter name ============
 def extract_shop_no(meter_name: str) -> str:
     match = re.search(r"\d+", str(meter_name))
     if match:
@@ -33,7 +33,7 @@ def extract_shop_no(meter_name: str) -> str:
     return meter_name if meter_name in ["Common", "MDB", "Common Service"] else None
 
 
-# ============ 电费计算函数 ============
+# ============ Electricity usage and cost calculation ============
 def calculate_usage(df, meter, shop_info):
     df_meter = df[df["Meter"] == meter].copy()
     df_meter["DateTime"] = pd.to_datetime(df_meter["DateTime"])
@@ -42,7 +42,7 @@ def calculate_usage(df, meter, shop_info):
     if df_meter.empty:
         return None
 
-    # 固定周期
+    # Fixed billing period
     start_time = pd.Timestamp("2025-07-17 00:00:00")
     end_time = pd.Timestamp("2025-08-17 00:00:00")
     days = 31
@@ -56,7 +56,7 @@ def calculate_usage(df, meter, shop_info):
     daily_charge = shop_info.get("Daily Supply Charge $ (Exc. GST)", 0)
     daily_cost = daily_charge * days
 
-    # 阶梯电价 / TOU
+    # Tiered / TOU tariff
     anytime_cost, after1650_cost, peak_cost, offpeak_cost = 0, 0, 0, 0
     peak_kwh, offpeak_kwh = 0, 0
 
@@ -93,7 +93,7 @@ def calculate_usage(df, meter, shop_info):
         peak_cost = peak_kwh * peak_rate
         offpeak_cost = offpeak_kwh * offpeak_rate
 
-    # ===== 总费用 =====
+    # Total cost
     consumption_cost = anytime_cost + after1650_cost + peak_cost + offpeak_cost
     total_excl = daily_cost + consumption_cost
     gst = total_excl * 0.1
@@ -120,12 +120,12 @@ def calculate_usage(df, meter, shop_info):
     }
 
 
-# ============ PDF 生成函数 ============
+# ============ Generate cover page PDF ============
 def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=None, statement_date="2025/08/20"):
     c = canvas.Canvas(pdf_path, pagesize=landscape(A4))
     width, height = landscape(A4)
 
-    # ===== Header =====
+    # Header bar
     c.setFillColor(colors.HexColor("#2E7D32"))
     c.rect(40, height - 60, width - 80, 30, fill=1, stroke=0)
     c.setFont("Helvetica-Bold", 14)
@@ -133,42 +133,40 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
     c.drawString(50, height - 50, "YOUR_COMPANY_NAME")
     c.drawRightString(width - 50, height - 50, "Electricity Statement")
 
-    # ===== Statement Date =====
+    # Statement Date
     c.setFillColor(colors.black)
     c.setFont("Helvetica", 10)
     c.drawString(40, height - 90, f"Statement Date: {statement_date}")
 
-    # ===== To (Tenant) =====
+    # Tenant info
     company = clean_text(shop_info.get("Company", "Unknown"))
     address = clean_text(shop_info.get("Address", "Unknown"))
-
     c.drawString(40, height - 120, "To:")
     c.drawString(80, height - 120, company)
     c.drawString(80, height - 140, address)
 
-    # ===== Asset Name 和 BFM Serial =====
+    # Asset name and BFM serial
     asset_name = clean_text(shop_info.get("Electrical Meter Asset Name", ""))
     bfm_serial = clean_text(shop_info.get("BFM Serial", ""))
     c.drawString(40, height - 170, f"Electrical Meter Asset Name: {asset_name}")
     c.drawString(40, height - 185, f"BFM Serial: {bfm_serial}")
 
-    # ===== Prepared by =====
+    # Prepared by
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, height - 210, "Prepared by YOUR_ORG_NAME on behalf of:")
     c.setFont("Helvetica", 9)
     c.drawString(40, height - 225, "YOUR_ADDRESS")
 
-    # ===== Statement Summary =====
+    # Statement Summary box
     box_x = width - 300
     box_y = height - 120
     c.setFont("Helvetica-Bold", 9)
     c.drawString(box_x, box_y, "Statement Summary")
     c.setFont("Helvetica", 9)
-
     c.drawString(box_x, box_y - 20, "Report Period")
     c.drawRightString(width - 50, box_y - 20, usage_data["period"])
 
-    # 如果是 Common，加上 Loss
+    # Add Loss cost for Common meter
     elec_excl = usage_data["total_excl"]
     loss_excl = embedded_data["loss_cost"] if embedded_data else 0
     total_excl = elec_excl + loss_excl
@@ -204,7 +202,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
     c.setFont("Helvetica-Bold", 10)
     c.drawCentredString(width - 85, row_y + 5, f"${total_incl:.2f}")
 
-    # ===== Charges 表格 =====
+    # Charges table
     table_y = height - 300
 
     if usage_data["anytime_cost"] or usage_data["after1650_cost"]:
@@ -233,7 +231,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
         c.drawString(col_x[6], row_y, f"{usage_data['after1650_cost']:.2f}")
         c.drawString(col_x[7], row_y, f"{usage_data['daily_cost']:.2f}")
 
-    else:  # TOU Tariff
+    else:  # TOU tariff
         headers = [
             "Unit", "Date", "Consumption (kWh)", "Peak Usage (kWh)", "Off-Peak Usage (kWh)",
             "Peak Cost ($)", "Off-Peak Cost ($)", "Daily Supply Cost ($)"
@@ -257,7 +255,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
 
     c.line(40, row_y - 2, width - 40, row_y - 2)
 
-    # ===== Embedded 表格 (仅 Common) =====
+    # Embedded network table (Common meter only)
     if meter == "Common" and embedded_data:
         row_y -= 40
         headers2 = [
@@ -273,9 +271,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
 
         row_y -= 20
         c.setFont("Helvetica", 8)
-
         loss_cost_per_day = embedded_data["loss_cost"] / embedded_data["days"]
-
         c.drawString(col_x2[0], row_y, f"{embedded_data['embedded_sum']:.3f}")
         c.drawString(col_x2[1], row_y, f"{embedded_data['mdb']:.3f}")
         c.drawString(col_x2[2], row_y, f"{embedded_data['var']:.3f}")
@@ -285,7 +281,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
         c.drawString(col_x2[6], row_y, f"{embedded_data['loss_cost']:.2f}")
         c.line(40, row_y - 2, width - 40, row_y - 2)
 
-    # ===== Summary =====
+    # Summary
     y = row_y - 50
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, y, "Summary")
@@ -293,7 +289,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
     c.drawString(60, y - 15, f"Average Units Per Day: {usage_data['avg_units']:.2f}")
     c.drawString(60, y - 30, f"Average Cost Per Day: ${usage_data['avg_cost_per_day']:.2f}")
 
-    # ===== Tariff Summary =====
+    # Tariff summary
     y = y - 40
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, y, "Tariff Summary")
@@ -310,14 +306,15 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=No
     c.drawString(60, y - 60, f"Billing Days: {usage_data['days']} days")
 
     c.save()
-# ============ 主程序 ============
+
+
+# ============ Main: generate all cover pages ============
 def generate_all_covers(results_file, mapping_file, output_folder):
     os.makedirs(output_folder, exist_ok=True)
 
-    # ===== 读取数据 =====
+    # Load data
     df = pd.read_excel(results_file)
     mapping_df = pd.read_excel(mapping_file)
-
     mapping_df.columns = mapping_df.columns.str.strip()
     mapping_df["Shop No."] = mapping_df["Shop No."].astype(str)
     mapping = mapping_df.set_index("Shop No.").to_dict(orient="index")
@@ -326,7 +323,7 @@ def generate_all_covers(results_file, mapping_file, output_folder):
     mdb_val = 0
     embedded_sum = 0
 
-    # ===== 遍历每个 meter，计算用电量 =====
+    # Calculate usage for each meter
     for meter in df["Meter"].unique():
         shop_no = extract_shop_no(meter)
         if not shop_no:
@@ -334,7 +331,7 @@ def generate_all_covers(results_file, mapping_file, output_folder):
 
         shop_info = mapping.get(shop_no, {})
         if not shop_info:
-            print(f"⚠️ 未找到 {shop_no} 的 tariff 信息，跳过 {meter}")
+            print(f"Warning: no tariff info found for {shop_no}, skipping {meter}")
             continue
 
         usage_data = calculate_usage(df, meter, shop_info)
@@ -343,13 +340,13 @@ def generate_all_covers(results_file, mapping_file, output_folder):
 
         results[meter] = usage_data
 
-        # 特殊处理 MDB 和 Common
+        # Track MDB and embedded network totals
         if meter == "MDB":
             mdb_val = usage_data["consumption"]
         else:
             embedded_sum += usage_data["consumption"]
 
-    # ===== 计算 Embedded Network 数据（只给 Common 用） =====
+    # Calculate embedded network loss (Common meter only)
     var_val = mdb_val - embedded_sum
     loss_cost = max(0, var_val) * 0.347075
     embedded_data = {
@@ -360,38 +357,23 @@ def generate_all_covers(results_file, mapping_file, output_folder):
         "days": 31
     }
 
-    # ===== 生成每个 PDF =====
+    # Generate one PDF per meter
     for meter, usage_data in results.items():
         shop_no = extract_shop_no(meter)
         shop_info = mapping.get(shop_no, {})
-
         pdf_path = os.path.join(output_folder, f"{meter}_Cover.pdf")
 
         if meter == "Common":
-            generate_cover_page(
-                pdf_path,
-                usage_data,
-                shop_info,
-                meter,
-                embedded_data=embedded_data
-            )
+            generate_cover_page(pdf_path, usage_data, shop_info, meter, embedded_data=embedded_data)
         else:
-            generate_cover_page(
-                pdf_path,
-                usage_data,
-                shop_info,
-                meter
-            )
+            generate_cover_page(pdf_path, usage_data, shop_info, meter)
 
-        print(f"✅ {meter} done: {pdf_path}")
+        print(f"Done: {pdf_path}")
 
 
-# ============ 使用 ============
+# ============ Run ============
 generate_all_covers(
     results_file=_BASE_DIR / "cleaned_30min.xlsx",
     mapping_file=_BASE_DIR / "C&E Report (Tariff after July).xlsx",
     output_folder=_BASE_DIR / "CoverPages",
 )
-
-
-

@@ -8,7 +8,7 @@ from pathlib import Path
 
 _BASE_DIR = Path(__file__).parent.parent
 
-# ============ 清理隐藏字符 ============
+# ============ Strip hidden characters from text ============
 def clean_text(text):
     if pd.isna(text):
         return ""
@@ -23,14 +23,14 @@ def clean_text(text):
     cleaned = re.sub(r'[^\x20-\x7E\u00A0-\u024F]+', '', cleaned)
     return cleaned
 
-# ============ 提取 Shop No ============
+# ============ Extract shop number from meter name ============
 def extract_shop_no(meter_name: str) -> str:
     match = re.search(r'\d+', str(meter_name))
     if match:
         return match.group(0)
     return meter_name if meter_name in ["Common Service", "MDB"] else None
 
-# ============ 电费计算函数 ============
+# ============ Electricity usage and cost calculation ============
 def calculate_usage(df, meter, shop_info):
     df_meter = df[df["Meter"] == meter].copy()
     df_meter["DateTime"] = pd.to_datetime(df_meter["DateTime"])
@@ -54,7 +54,7 @@ def calculate_usage(df, meter, shop_info):
     peak_kwh, offpeak_kwh, peak_rate, offpeak_rate = None, None, None, None
     anytime_cost, after1650_cost = None, None
 
-    # ===== AnyTime 或阶梯电价 =====
+    # ===== AnyTime or tiered tariff =====
     if pd.notna(shop_info.get("AnyTime Consumption Rate $ (Exc. GST)")):
         unit_rate = shop_info["AnyTime Consumption Rate $ (Exc. GST)"]
 
@@ -83,12 +83,12 @@ def calculate_usage(df, meter, shop_info):
             ts = row["DateTime"]
             weekday = ts.weekday()
             hour = ts.hour
-            if weekday < 5:  # 周一到周五
+            if weekday < 5:  # Mon-Fri
                 if 8 <= hour < 22:
                     return "peak"
                 else:
                     return "offpeak"
-            else:  # 周六日
+            else:  # Sat-Sun
                 return "offpeak"
 
         df_meter["period"] = df_meter.apply(classify, axis=1)
@@ -97,7 +97,7 @@ def calculate_usage(df, meter, shop_info):
 
         consumption_cost = peak_kwh * peak_rate + offpeak_kwh * offpeak_rate
 
-    # ===== 总费用 =====
+    # Total cost
     total_excl = daily_cost + consumption_cost
     gst = total_excl * 0.1
     total_incl = total_excl + gst
@@ -124,12 +124,12 @@ def calculate_usage(df, meter, shop_info):
         "offpeak_rate": offpeak_rate
     }
 
-# ============ PDF 生成函数 ============
+# ============ Generate cover page PDF ============
 def generate_cover_page(pdf_path, usage_data, shop_info, meter, statement_date="2025/07/22"):
     c = canvas.Canvas(pdf_path, pagesize=landscape(A4))
     width, height = landscape(A4)
 
-    # ===== Header =====
+    # Header bar
     c.setFillColor(colors.HexColor("#2E7D32"))
     c.rect(40, height-60, width-80, 30, fill=1, stroke=0)
     c.setFont("Helvetica-Bold", 14)
@@ -137,12 +137,12 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, statement_date="
     c.drawString(50, height-50, "YOUR_COMPANY_NAME")
     c.drawRightString(width-50, height-50, "Electricity Statement")
 
-    # Statement Date
+    # Statement date
     c.setFillColor(colors.black)
     c.setFont("Helvetica", 10)
     c.drawString(40, height-90, f"Statement Date: {statement_date}")
 
-    # ===== To (Tenant) =====
+    # Tenant info
     company = clean_text(shop_info.get("Company", "Unknown"))
     address = clean_text(shop_info.get("Address", "Unknown"))
 
@@ -150,13 +150,13 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, statement_date="
     c.drawString(80, height-120, company)
     c.drawString(80, height-140, address)
 
-    # ===== Prepared by (紧接在 To: 信息下面) =====
+    # Prepared by
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, height-190, "Prepared by YOUR_ORG_NAME on behalf of:")
     c.setFont("Helvetica", 9)
     c.drawString(40, height-205, "YOUR_ADDRESS")
 
-    # ===== Statement Summary =====
+    # Statement Summary box
     box_x = width - 300
     box_y = height - 120
     c.setFont("Helvetica-Bold", 9)
@@ -183,7 +183,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, statement_date="
     c.setFont("Helvetica-Bold", 10)
     c.drawCentredString(width - 85, row_y + 5, f"${usage_data['total_incl']:.2f}")
 
-    # ===== Charges 表格 =====
+    # ===== Charges table =====
     table_y = height-300
     if usage_data.get("peak_rate") is not None:
         headers = [
@@ -243,7 +243,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, statement_date="
 
     c.line(40, row_y-2, width-40, row_y-2)
 
-    # ===== Summary =====
+    # Summary
     y = row_y - 50
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, y, "Summary")
@@ -251,7 +251,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, statement_date="
     c.drawString(60, y-15, f"Average Units Per Day: {usage_data['avg_units']:.2f}")
     c.drawString(60, y-30, f"Average Cost Per Day: ${usage_data['avg_cost_per_day']:.2f}")
 
-    # ===== Tariff Summary =====
+    # Tariff summary
     y = y - 40
     c.setFont("Helvetica-Bold", 9)
     c.drawString(40, y, "Tariff Summary")
@@ -270,7 +270,7 @@ def generate_cover_page(pdf_path, usage_data, shop_info, meter, statement_date="
 
     c.save()
 
-# ============ 主程序 ============
+# ============ Main: generate all cover pages ============
 def generate_all_covers(results_file, mapping_file, output_folder):
     os.makedirs(output_folder, exist_ok=True)
 
@@ -286,9 +286,9 @@ def generate_all_covers(results_file, mapping_file, output_folder):
         if not shop_no:
             continue
 
-        # MDB 和 Common Service 用 Anytime 表格
+        # MDB and Common Service use Anytime table
         if shop_no in ["Common Service", "MDB"]:
-            shop_info = mapping.get("2", {}).copy()  # 假设用 Shop2 的 tariff（可改成实际行）
+            shop_info = mapping.get("2", {}).copy()  # Use Shop2 tariff as reference (adjust as needed)
         else:
             shop_info = mapping.get(shop_no, {})
         if not shop_info:
@@ -300,9 +300,9 @@ def generate_all_covers(results_file, mapping_file, output_folder):
 
         pdf_path = os.path.join(output_folder, f"{meter}_Cover.pdf")
         generate_cover_page(pdf_path, usage_data, shop_info, meter)
-        print(f"✅ {meter} done: {pdf_path}")
+        print(f"Done: {pdf_path}")
 
-# ============ 使用 ============
+# ============ Run ============
 generate_all_covers(
     results_file=_BASE_DIR / "cleaned_30min.xlsx",
     mapping_file=_BASE_DIR / "C&E Report (Tariff after July).xlsx",

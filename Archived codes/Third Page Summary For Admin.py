@@ -6,7 +6,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 
-# ============ 清理隐藏字符 ============
+# ============ Strip hidden characters from text ============
 def clean_text(text):
     if pd.isna(text):
         return ""
@@ -21,14 +21,14 @@ def clean_text(text):
     cleaned = re.sub(r'[^\x20-\x7E\u00A0-\u024F]+', '', cleaned)
     return cleaned
 
-# ============ 提取 Shop No ============
+# ============ Extract shop number from meter name ============
 def extract_shop_no(meter_name: str) -> str:
     match = re.search(r'\d+', str(meter_name))
     if match:
         return match.group(0)
     return meter_name if meter_name in ["Common", "MDB"] else None
 
-# ============ 电费计算函数 ============
+# ============ Electricity usage and cost calculation ============
 def calculate_usage(df, meter, shop_info, start_date, end_date):
     df_meter = df[df["Meter"] == meter].copy()
     df_meter["DateTime"] = pd.to_datetime(df_meter["DateTime"])
@@ -41,14 +41,14 @@ def calculate_usage(df, meter, shop_info, start_date, end_date):
     curr_read = df_meter["kWh_IMP"].iloc[-1]
     consumption = curr_read - prev_read
 
-    # 固定 31 天
+    # Fixed 31-day billing period
     days = 31
 
     daily_charge = shop_info.get("Daily Supply Charge $ (Exc. GST)", 0)
     daily_cost = daily_charge * days
     anytime_cost, after1650_cost, peak_cost, offpeak_cost = 0, 0, 0, 0
 
-    # Anytime 阶梯电价
+    # Anytime / tiered tariff
     if pd.notna(shop_info.get("AnyTime Consumption Rate $ (Exc. GST)")):
         unit_rate = shop_info["AnyTime Consumption Rate $ (Exc. GST)"]
         after1650_rate = shop_info.get("After 1650 units (Exc. GST)", 0)
@@ -116,7 +116,7 @@ def calculate_usage(df, meter, shop_info, start_date, end_date):
         }
     return None
 
-# ============ 生成 Summary Report ============
+# ============ Generate summary report ============
 def generate_summary_report(results_file, mapping_file, output_pdf):
     df = pd.read_excel(results_file)
     df["DateTime"] = pd.to_datetime(df["DateTime"])
@@ -129,7 +129,7 @@ def generate_summary_report(results_file, mapping_file, output_pdf):
     mapping_df["Shop No."] = mapping_df["Shop No."].astype(str)
     mapping = mapping_df.set_index("Shop No.").to_dict(orient="index")
 
-    # MDB 和 Common 用 Shop11 的 tariff
+    # MDB and Common use Shop11 tariff
     shop11_tariff = mapping.get("11", {})
     mapping["MDB"] = shop11_tariff
     mapping["Common"] = shop11_tariff
@@ -188,9 +188,9 @@ def generate_summary_report(results_file, mapping_file, output_pdf):
         elements.append(Spacer(1, 15))
 
     doc.build(elements)
-    print(f"✅ 报告已生成: {output_pdf}")
+    print(f"Report generated: {output_pdf}")
 
-# ============ 使用 ============
+# ============ Run ============
 generate_summary_report(
     results_file="/cleaned_30min.xlsx",
     mapping_file="/C&E Report (Tariff after July).xlsx",

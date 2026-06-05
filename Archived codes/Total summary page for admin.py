@@ -7,7 +7,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
 
-# ========== 配置 ==========
+# ========== Configuration ==========
 excel_file = BASE_DIR / "Results.xlsx"
 output_pdf = "Tenants_Summary_Report.pdf"
 
@@ -15,10 +15,10 @@ RATE = 0.381783
 DAILY_CHARGE = 1.87964
 GST_RATE = 0.1  # 10%
 
-# ========== 读取 Excel ==========
+# ========== Load Excel ==========
 df = pd.read_excel(excel_file)
 
-# 按 Meter 分组
+# Group by meter
 summary = []
 for meter, group in df.groupby("Meter"):
     prev = group.iloc[0]["kWh_IMP"]
@@ -29,7 +29,7 @@ for meter, group in df.groupby("Meter"):
     end_date = pd.to_datetime(group.iloc[-1]["DateTime"])
     days = (end_date - start_date).days
 
-    # ========== 规则 1: Common 不收 Daily Charge ==========
+    # ========== Rule 1: Common meter has no daily charge ==========
     if meter.lower() == "common":
         daily_total = 0
     else:
@@ -38,7 +38,7 @@ for meter, group in df.groupby("Meter"):
     consumption_total = consumption * RATE
     excl_gst = daily_total + consumption_total
 
-    # ========== 规则 2: 如果没有耗电，费用归零 ==========
+    # ========== Rule 2: Zero cost if no consumption ==========
     if consumption <= 0:
         excl_gst = 0
         gst = 0
@@ -48,7 +48,7 @@ for meter, group in df.groupby("Meter"):
         total = excl_gst + gst
 
     summary.append({
-        "shop": meter,   # 用真实的 Meter 名称
+        "shop": meter,
         "period": f"{start_date.date()} - {end_date.date()}",
         "previous": prev,
         "current": curr,
@@ -60,7 +60,7 @@ for meter, group in df.groupby("Meter"):
         "total_inc_gst": total
     })
 
-# ========== 生成 PDF ==========
+# ========== Generate PDF ==========
 styles = getSampleStyleSheet()
 
 doc = SimpleDocTemplate(
@@ -73,21 +73,21 @@ doc = SimpleDocTemplate(
 )
 elements = []
 
-# 页眉（靠左对齐）
+# Header (left aligned)
 elements.append(Paragraph(
     "<para align='left'><font size=9>Prepared by YOUR_ORG_NAME<br/>YOUR_ADDRESS</font></para>",
     styles["Normal"]
 ))
 elements.append(Spacer(1, 12))
 
-# 标题（居中）
+# Title (centred)
 elements.append(Paragraph(
     "<para align='center'><b><font size=14>Tenants Summary Report</font></b></para>",
     styles["Normal"]
 ))
 elements.append(Spacer(1, 18))
 
-# 每个 SHOP 表格
+# Table for each shop
 for s in summary:
     elements.append(Paragraph(
         f"<para align='left'><font size=9><b>{s['shop']}</b></font></para>",
@@ -121,5 +121,5 @@ for s in summary:
     elements.append(Spacer(1, 20))
 
 doc.build(elements)
-print(f"✅ 报告已生成: {output_pdf}")
+print(f"Report generated: {output_pdf}")
 
